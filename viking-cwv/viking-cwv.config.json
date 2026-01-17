@@ -1,0 +1,30 @@
+{
+  "origins": [
+    {
+      "name": "River",
+      "origin": "https://vikingrivercruises.com",
+      "sitemapUrl": "https://www.vikingrivercruises.com/sitemap.xml"
+    },
+    {
+      "name": "Ocean",
+      "origin": "https://vikingcruises.com",
+      "sitemapUrl": "https://www.vikingcruises.com/sitemap.xml",
+      "pathFilter": "/oceans/"
+    },
+    {
+      "name": "Expedition",
+      "origin": "https://vikingcruises.com",
+      "sitemapUrl": "https://www.vikingcruises.com/sitemap.xml",
+      "pathFilter": "/expeditions/"
+    },
+    {
+      "name": "Portal",
+      "origin": "https://viking.com",
+      "cruxOnly": true
+    }
+  ],
+  "samplesPerType": 5,
+  "delayBetweenRequests": 1000,
+  "strategy": "mobile",
+  "outputDir": "./output"
+}

@@ -1,0 +1,20 @@
+# Environment files with secrets
+.env
+.env.local
+.env.*.local
+
+# Output files
+output/
+*.log
+
+# Node
+node_modules/
+dist/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
