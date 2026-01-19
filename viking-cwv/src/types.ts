@@ -98,6 +98,12 @@ export interface ReportSummary {
   totalOrigins: number;
   worstMetric?: string;
   recommendation?: string;
+  // Average scores across all tested pages
+  averageScore?: number;
+  averageLcp?: number;
+  averageInp?: number;
+  averageCls?: number;
+  totalPagesTested?: number;
 }
 
 export interface Report {

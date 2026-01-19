@@ -8,6 +8,8 @@ import type {
   PSIResult,
   PageTypeSamples,
   PageType,
+  PropertySamples,
+  SubPropertySamples,
 } from './types.js';
 import { formatCrUXValue, getStatusEmoji } from './crux.js';
 import { calculateAverages, formatPSIValue } from './psi.js';
@@ -82,10 +84,82 @@ function generateRecommendation(worstMetric: string | undefined): string {
 }
 
 /**
+ * Extract all PSI results from origin reports
+ */
+function extractAllPSIResults(
+  originReports: Map<string, OriginReport>
+): PSIResult[] {
+  const allResults: PSIResult[] = [];
+
+  for (const report of originReports.values()) {
+    const samples = report.samples;
+
+    // Check if samples is nested (has sub-properties like ocean/expedition)
+    const firstKey = Object.keys(samples)[0];
+    const isNested =
+      firstKey &&
+      typeof samples[firstKey] === 'object' &&
+      !('count' in (samples[firstKey] as object));
+
+    if (isNested) {
+      // Nested structure (e.g., ocean -> itinerary -> PageTypeSamples)
+      for (const subPropertySamples of Object.values(samples as SubPropertySamples)) {
+        for (const pageTypeSamples of Object.values(subPropertySamples as PropertySamples)) {
+          if (pageTypeSamples.urls) {
+            allResults.push(...pageTypeSamples.urls);
+          }
+        }
+      }
+    } else {
+      // Flat structure (pageType -> PageTypeSamples)
+      for (const pageTypeSamples of Object.values(samples as PropertySamples)) {
+        if (pageTypeSamples.urls) {
+          allResults.push(...pageTypeSamples.urls);
+        }
+      }
+    }
+  }
+
+  return allResults;
+}
+
+/**
+ * Calculate overall averages from all PSI results
+ */
+function calculateOverallAverages(
+  results: PSIResult[]
+): { avgScore: number; avgLcp: number; avgInp: number; avgCls: number; count: number } {
+  const validResults = results.filter((r) => !r.error);
+
+  if (validResults.length === 0) {
+    return { avgScore: 0, avgLcp: 0, avgInp: 0, avgCls: 0, count: 0 };
+  }
+
+  const sum = validResults.reduce(
+    (acc, r) => ({
+      score: acc.score + r.score,
+      lcp: acc.lcp + r.lcp,
+      inp: acc.inp + r.inp,
+      cls: acc.cls + r.cls,
+    }),
+    { score: 0, lcp: 0, inp: 0, cls: 0 }
+  );
+
+  return {
+    avgScore: Math.round(sum.score / validResults.length),
+    avgLcp: Math.round(sum.lcp / validResults.length),
+    avgInp: Math.round(sum.inp / validResults.length),
+    avgCls: Number((sum.cls / validResults.length).toFixed(3)),
+    count: validResults.length,
+  };
+}
+
+/**
  * Build the report summary
  */
 export function buildSummary(
-  cruxDataMap: Map<string, CrUXData>
+  cruxDataMap: Map<string, CrUXData>,
+  originReports?: Map<string, OriginReport>
 ): ReportSummary {
   const totalOrigins = cruxDataMap.size;
   const passedOrigins = Array.from(cruxDataMap.values()).filter(
@@ -96,13 +170,28 @@ export function buildSummary(
   const worstMetric = findWorstMetric(cruxDataMap);
   const recommendation = generateRecommendation(worstMetric);
 
-  return {
+  const summary: ReportSummary = {
     status,
     passedOrigins,
     totalOrigins,
     worstMetric,
     recommendation,
   };
+
+  // Calculate overall averages if origin reports are provided
+  if (originReports && originReports.size > 0) {
+    const allResults = extractAllPSIResults(originReports);
+    if (allResults.length > 0) {
+      const averages = calculateOverallAverages(allResults);
+      summary.averageScore = averages.avgScore;
+      summary.averageLcp = averages.avgLcp;
+      summary.averageInp = averages.avgInp;
+      summary.averageCls = averages.avgCls;
+      summary.totalPagesTested = averages.count;
+    }
+  }
+
+  return summary;
 }
 
 /**
@@ -112,7 +201,7 @@ export function buildReport(
   cruxDataMap: Map<string, CrUXData>,
   originReports: Map<string, OriginReport>
 ): Report {
-  const summary = buildSummary(cruxDataMap);
+  const summary = buildSummary(cruxDataMap, originReports);
 
   const origins: Record<string, OriginReport> = {};
   for (const [origin, report] of originReports.entries()) {
@@ -147,6 +236,24 @@ export function generateMarkdownReport(report: Report): string {
     `**Status: ${statusIcon} ${report.summary.status}** (${report.summary.passedOrigins}/${report.summary.totalOrigins} origins passing)`
   );
   lines.push('');
+
+  // Overall average score from lab data
+  if (report.summary.averageScore !== undefined && report.summary.totalPagesTested) {
+    lines.push('### Overall Lab Data Averages');
+    lines.push('');
+    lines.push(`- **Pages Tested:** ${report.summary.totalPagesTested}`);
+    lines.push(`- **Average Score:** ${report.summary.averageScore}/100`);
+    if (report.summary.averageLcp !== undefined) {
+      lines.push(`- **Average LCP:** ${formatPSIValue(report.summary.averageLcp, 'lcp')}`);
+    }
+    if (report.summary.averageInp !== undefined) {
+      lines.push(`- **Average INP:** ${report.summary.averageInp}ms`);
+    }
+    if (report.summary.averageCls !== undefined) {
+      lines.push(`- **Average CLS:** ${report.summary.averageCls.toFixed(3)}`);
+    }
+    lines.push('');
+  }
 
   // CrUX overview table
   lines.push('| Origin | LCP | INP | CLS | Status |');
@@ -292,8 +399,26 @@ export function printSummary(report: Report): void {
     `Status: ${statusIcon} ${report.summary.status} (${report.summary.passedOrigins}/${report.summary.totalOrigins} origins passing)\n`
   );
 
-  console.log('Origin Results:');
-  console.log('---------------');
+  // Display average score if available
+  if (report.summary.averageScore !== undefined && report.summary.totalPagesTested) {
+    console.log('Lab Data Averages:');
+    console.log('------------------');
+    console.log(`  Pages Tested: ${report.summary.totalPagesTested}`);
+    console.log(`  Average Score: ${report.summary.averageScore}/100`);
+    if (report.summary.averageLcp !== undefined) {
+      console.log(`  Average LCP: ${formatPSIValue(report.summary.averageLcp, 'lcp')}`);
+    }
+    if (report.summary.averageInp !== undefined) {
+      console.log(`  Average INP: ${report.summary.averageInp}ms`);
+    }
+    if (report.summary.averageCls !== undefined) {
+      console.log(`  Average CLS: ${report.summary.averageCls.toFixed(3)}`);
+    }
+    console.log('');
+  }
+
+  console.log('Origin Results (Field Data):');
+  console.log('----------------------------');
 
   for (const [origin, data] of Object.entries(report.origins)) {
     const crux = data.crux;
@@ -319,7 +444,7 @@ export function printSummary(report: Report): void {
   }
 
   if (report.summary.recommendation) {
-    console.log(`Recommendation: ${report.summary.recommendation}`);
+    console.log(`\nRecommendation: ${report.summary.recommendation}`);
   }
 
   console.log('\n========================================\n');
@@ -484,6 +609,39 @@ export function generateHtmlReport(report: Report): string {
         ${report.summary.recommendation ? `
             <div class="recommendation">
                 <strong>Recommendation:</strong> ${report.summary.recommendation}
+            </div>
+        ` : ''}
+
+        ${report.summary.averageScore !== undefined && report.summary.totalPagesTested ? `
+            <div class="section">
+                <h2>Overall Lab Data Averages</h2>
+                <div class="meta">${report.summary.totalPagesTested} pages tested</div>
+                <div class="grid">
+                    <div class="metric-card" style="border-left: 4px solid ${getScoreColor(report.summary.averageScore)}">
+                        <div class="metric-label">Average Performance Score</div>
+                        <div class="metric-value" style="color: ${getScoreColor(report.summary.averageScore)}">
+                            ${report.summary.averageScore}/100
+                        </div>
+                    </div>
+                    ${report.summary.averageLcp !== undefined ? `
+                    <div class="metric-card">
+                        <div class="metric-label">Average LCP</div>
+                        <div class="metric-value">${formatPSIValue(report.summary.averageLcp, 'lcp')}</div>
+                    </div>
+                    ` : ''}
+                    ${report.summary.averageInp !== undefined ? `
+                    <div class="metric-card">
+                        <div class="metric-label">Average INP</div>
+                        <div class="metric-value">${report.summary.averageInp}ms</div>
+                    </div>
+                    ` : ''}
+                    ${report.summary.averageCls !== undefined ? `
+                    <div class="metric-card">
+                        <div class="metric-label">Average CLS</div>
+                        <div class="metric-value">${report.summary.averageCls.toFixed(3)}</div>
+                    </div>
+                    ` : ''}
+                </div>
             </div>
         ` : ''}
 
