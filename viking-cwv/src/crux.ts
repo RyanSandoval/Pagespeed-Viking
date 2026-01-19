@@ -148,7 +148,7 @@ export async function fetchCrUXData(
       ...cruxData,
       overall: getOverallStatus(cruxData),
     };
-  } catch (error) {
+  } catch (error: any) {
     if (axios.isAxiosError(error)) {
       // Handle 404 - no data available for this origin
       if (error.response?.status === 404) {
@@ -186,7 +186,7 @@ export async function fetchCrUXDataForOrigins(
         const status = data.overall === 'PASS' ? '✓' : '✗';
         console.log(`    ${status} ${origin}: ${data.overall}`);
       }
-    } catch (error) {
+    } catch (error: any) {
       if (verbose) {
         console.warn(
           `    Warning: Failed to fetch CrUX data for ${origin}: ${error instanceof Error ? error.message : 'Unknown error'}`

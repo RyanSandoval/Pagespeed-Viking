@@ -15,13 +15,14 @@ export async function fetchSitemap(sitemapUrl: string): Promise<SitemapUrl[]> {
     const response = await axios.get(sitemapUrl, {
       timeout: 30000,
       headers: {
-        'User-Agent': 'VikingCWVBot/1.0',
+        'User-Agent':
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         Accept: 'application/xml, text/xml, */*',
       },
     });
 
     return parseSitemap(response.data);
-  } catch (error) {
+  } catch (error: any) {
     if (axios.isAxiosError(error)) {
       throw new Error(
         `Failed to fetch sitemap from ${sitemapUrl}: ${error.message}`
@@ -149,7 +150,8 @@ export async function fetchAllSitemapUrls(
     const response = await axios.get(sitemapUrl, {
       timeout: 30000,
       headers: {
-        'User-Agent': 'VikingCWVBot/1.0',
+        'User-Agent':
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         Accept: 'application/xml, text/xml, */*',
       },
     });
@@ -179,7 +181,7 @@ export async function fetchAllSitemapUrls(
       // This is a regular sitemap
       return parseSitemap(response.data);
     }
-  } catch (error) {
+  } catch (error: any) {
     if (verbose) {
       console.warn(`  Warning: Failed to fetch sitemap ${sitemapUrl}`);
     }

@@ -86,7 +86,7 @@ export async function fetchPSIData(
         fcp: audits['first-contentful-paint']?.numericValue ?? 0,
         ttfb: audits['server-response-time']?.numericValue ?? 0,
       };
-    } catch (error) {
+    } catch (error: any) {
       lastError = error instanceof Error ? error : new Error(String(error));
 
       // Don't retry on client errors (400-499)

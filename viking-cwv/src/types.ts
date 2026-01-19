@@ -113,7 +113,7 @@ export interface CLIOptions {
   samples?: number;
   cruxOnly?: boolean;
   property?: string;
-  format?: 'json' | 'markdown' | 'both';
+  format?: 'json' | 'markdown' | 'html' | 'both';
   verbose?: boolean;
   config?: string;
 }

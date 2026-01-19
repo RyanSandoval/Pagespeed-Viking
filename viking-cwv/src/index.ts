@@ -40,7 +40,7 @@ program
   .option('-p, --property <name>', 'Only analyze a specific property')
   .option(
     '-f, --format <format>',
-    'Output format: json, markdown, or both',
+    'Output format: json, markdown, html, or both',
     'both'
   )
   .option('-v, --verbose', 'Show verbose output')
@@ -59,7 +59,7 @@ async function run(options: {
     samples: parseInt(options.samples, 10),
     cruxOnly: options.cruxOnly,
     property: options.property,
-    format: options.format as 'json' | 'markdown' | 'both',
+    format: options.format as 'json' | 'markdown' | 'html' | 'both',
     verbose: options.verbose,
     config: options.config,
   };
@@ -132,6 +132,8 @@ async function run(options: {
     console.log(chalk.green('Reports saved:'));
     if (paths.jsonPath) console.log(`  JSON: ${paths.jsonPath}`);
     if (paths.markdownPath) console.log(`  Markdown: ${paths.markdownPath}`);
+    // @ts-ignore
+    if (paths.htmlPath) console.log(`  HTML: ${paths.htmlPath}`);
 
     return;
   }
@@ -345,8 +347,10 @@ async function run(options: {
   console.log(chalk.green('Reports saved:'));
   if (paths.jsonPath) console.log(`  JSON: ${paths.jsonPath}`);
   if (paths.markdownPath) console.log(`  Markdown: ${paths.markdownPath}`);
+  // @ts-ignore - htmlPath not yet in type definition but added in runtime
+  if (paths.htmlPath) console.log(`  HTML: ${paths.htmlPath}`); // eslint-disable-line
 
   console.log(chalk.blue('\n✨ Analysis complete!\n'));
 }
 
-program.parse();
+program.parse(process.argv);
