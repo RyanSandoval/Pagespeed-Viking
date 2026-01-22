@@ -122,6 +122,7 @@ export interface CLIOptions {
   format?: 'json' | 'markdown' | 'html' | 'both';
   verbose?: boolean;
   config?: string;
+  urls?: string[]; // Specific URLs to test (1-10)
 }
 
 // Robots.txt types
@@ -130,4 +131,29 @@ export interface RobotsRule {
   disallow: string[];
   allow: string[];
   sitemaps: string[];
+}
+
+// URL Test types (for testing specific URLs with mobile/desktop)
+export interface URLTestResult {
+  url: string;
+  mobile: PSIResult;
+  desktop: PSIResult;
+}
+
+export interface URLTestSummary {
+  totalUrls: number;
+  averageMobileScore: number;
+  averageDesktopScore: number;
+  averageMobileLcp: number;
+  averageDesktopLcp: number;
+  averageMobileInp: number;
+  averageDesktopInp: number;
+  averageMobileCls: number;
+  averageDesktopCls: number;
+}
+
+export interface URLTestReport {
+  generated: string;
+  summary: URLTestSummary;
+  results: URLTestResult[];
 }

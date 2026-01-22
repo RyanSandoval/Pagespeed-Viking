@@ -10,6 +10,9 @@ import type {
   PageType,
   PropertySamples,
   SubPropertySamples,
+  URLTestResult,
+  URLTestReport,
+  URLTestSummary,
 } from './types.js';
 import { formatCrUXValue, getStatusEmoji } from './crux.js';
 import { calculateAverages, formatPSIValue } from './psi.js';
@@ -713,5 +716,437 @@ export function generateHtmlReport(report: Report): string {
         </table><br>
     `;
   }
+}
+
+// ============================================
+// URL Test Report Functions (Mobile + Desktop)
+// ============================================
+
+/**
+ * Build summary for URL test report
+ */
+export function buildURLTestSummary(results: URLTestResult[]): URLTestSummary {
+  const validResults = results.filter(
+    (r) => !r.mobile.error && !r.desktop.error
+  );
+
+  if (validResults.length === 0) {
+    return {
+      totalUrls: results.length,
+      averageMobileScore: 0,
+      averageDesktopScore: 0,
+      averageMobileLcp: 0,
+      averageDesktopLcp: 0,
+      averageMobileInp: 0,
+      averageDesktopInp: 0,
+      averageMobileCls: 0,
+      averageDesktopCls: 0,
+    };
+  }
+
+  const sum = validResults.reduce(
+    (acc, r) => ({
+      mobileScore: acc.mobileScore + r.mobile.score,
+      desktopScore: acc.desktopScore + r.desktop.score,
+      mobileLcp: acc.mobileLcp + r.mobile.lcp,
+      desktopLcp: acc.desktopLcp + r.desktop.lcp,
+      mobileInp: acc.mobileInp + r.mobile.inp,
+      desktopInp: acc.desktopInp + r.desktop.inp,
+      mobileCls: acc.mobileCls + r.mobile.cls,
+      desktopCls: acc.desktopCls + r.desktop.cls,
+    }),
+    {
+      mobileScore: 0,
+      desktopScore: 0,
+      mobileLcp: 0,
+      desktopLcp: 0,
+      mobileInp: 0,
+      desktopInp: 0,
+      mobileCls: 0,
+      desktopCls: 0,
+    }
+  );
+
+  const count = validResults.length;
+
+  return {
+    totalUrls: results.length,
+    averageMobileScore: Math.round(sum.mobileScore / count),
+    averageDesktopScore: Math.round(sum.desktopScore / count),
+    averageMobileLcp: Math.round(sum.mobileLcp / count),
+    averageDesktopLcp: Math.round(sum.desktopLcp / count),
+    averageMobileInp: Math.round(sum.mobileInp / count),
+    averageDesktopInp: Math.round(sum.desktopInp / count),
+    averageMobileCls: Number((sum.mobileCls / count).toFixed(3)),
+    averageDesktopCls: Number((sum.desktopCls / count).toFixed(3)),
+  };
+}
+
+/**
+ * Build URL test report
+ */
+export function buildURLTestReport(results: URLTestResult[]): URLTestReport {
+  return {
+    generated: new Date().toISOString(),
+    summary: buildURLTestSummary(results),
+    results,
+  };
+}
+
+/**
+ * Print URL test summary to console
+ */
+export function printURLTestSummary(report: URLTestReport): void {
+  console.log('\n========================================');
+  console.log('     PageSpeed Insights Results');
+  console.log('========================================\n');
+
+  console.log(`URLs Tested: ${report.summary.totalUrls}\n`);
+
+  // Score comparison
+  console.log('Average Scores:');
+  console.log('---------------');
+  console.log(`  Mobile:  ${report.summary.averageMobileScore}/100`);
+  console.log(`  Desktop: ${report.summary.averageDesktopScore}/100`);
+  console.log('');
+
+  // Metrics comparison
+  console.log('Average Metrics:');
+  console.log('----------------');
+  console.log(`  LCP:  Mobile ${formatPSIValue(report.summary.averageMobileLcp, 'lcp')} | Desktop ${formatPSIValue(report.summary.averageDesktopLcp, 'lcp')}`);
+  console.log(`  INP:  Mobile ${report.summary.averageMobileInp}ms | Desktop ${report.summary.averageDesktopInp}ms`);
+  console.log(`  CLS:  Mobile ${report.summary.averageMobileCls.toFixed(3)} | Desktop ${report.summary.averageDesktopCls.toFixed(3)}`);
+  console.log('');
+
+  // Per-URL results
+  console.log('Per-URL Results:');
+  console.log('----------------');
+
+  for (const result of report.results) {
+    console.log(`\n${result.url}`);
+    if (result.mobile.error) {
+      console.log(`  Mobile:  Error - ${result.mobile.error}`);
+    } else {
+      console.log(`  Mobile:  Score ${result.mobile.score} | LCP ${formatPSIValue(result.mobile.lcp, 'lcp')} | CLS ${result.mobile.cls.toFixed(2)}`);
+    }
+    if (result.desktop.error) {
+      console.log(`  Desktop: Error - ${result.desktop.error}`);
+    } else {
+      console.log(`  Desktop: Score ${result.desktop.score} | LCP ${formatPSIValue(result.desktop.lcp, 'lcp')} | CLS ${result.desktop.cls.toFixed(2)}`);
+    }
+  }
+
+  console.log('\n========================================\n');
+}
+
+/**
+ * Generate Markdown report for URL tests
+ */
+export function generateURLTestMarkdownReport(report: URLTestReport): string {
+  const lines: string[] = [];
+  const date = new Date(report.generated);
+
+  lines.push('# PageSpeed Insights Report');
+  lines.push(
+    `Generated: ${date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}`
+  );
+  lines.push('');
+
+  // Summary
+  lines.push('## Summary');
+  lines.push(`**URLs Tested:** ${report.summary.totalUrls}`);
+  lines.push('');
+
+  lines.push('### Average Scores');
+  lines.push('| Device | Score | LCP | INP | CLS |');
+  lines.push('|--------|-------|-----|-----|-----|');
+  lines.push(
+    `| Mobile | ${report.summary.averageMobileScore} | ${formatPSIValue(report.summary.averageMobileLcp, 'lcp')} | ${report.summary.averageMobileInp}ms | ${report.summary.averageMobileCls.toFixed(3)} |`
+  );
+  lines.push(
+    `| Desktop | ${report.summary.averageDesktopScore} | ${formatPSIValue(report.summary.averageDesktopLcp, 'lcp')} | ${report.summary.averageDesktopInp}ms | ${report.summary.averageDesktopCls.toFixed(3)} |`
+  );
+  lines.push('');
+
+  // Per-URL results
+  lines.push('## Detailed Results');
+  lines.push('');
+
+  for (const result of report.results) {
+    lines.push(`### ${result.url}`);
+    lines.push('');
+    lines.push('| Device | Score | LCP | INP | CLS | FCP | TTFB |');
+    lines.push('|--------|-------|-----|-----|-----|-----|------|');
+
+    if (result.mobile.error) {
+      lines.push(`| Mobile | Error | - | - | - | - | - |`);
+    } else {
+      lines.push(
+        `| Mobile | ${result.mobile.score} | ${formatPSIValue(result.mobile.lcp, 'lcp')} | ${result.mobile.inp}ms | ${result.mobile.cls.toFixed(3)} | ${formatPSIValue(result.mobile.fcp, 'fcp')} | ${result.mobile.ttfb}ms |`
+      );
+    }
+
+    if (result.desktop.error) {
+      lines.push(`| Desktop | Error | - | - | - | - | - |`);
+    } else {
+      lines.push(
+        `| Desktop | ${result.desktop.score} | ${formatPSIValue(result.desktop.lcp, 'lcp')} | ${result.desktop.inp}ms | ${result.desktop.cls.toFixed(3)} | ${formatPSIValue(result.desktop.fcp, 'fcp')} | ${result.desktop.ttfb}ms |`
+      );
+    }
+    lines.push('');
+  }
+
+  return lines.join('\n');
+}
+
+/**
+ * Generate HTML report for URL tests
+ */
+export function generateURLTestHtmlReport(report: URLTestReport): string {
+  const date = new Date(report.generated).toLocaleDateString('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+
+  const getScoreColor = (score: number) => {
+    if (score >= 90) return '#0f9d58';
+    if (score >= 50) return '#ea8600';
+    return '#d93025';
+  };
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PageSpeed Insights Report</title>
+    <style>
+        :root {
+            --primary: #002F5F;
+            --bg: #f8f9fa;
+            --card-bg: #ffffff;
+            --text: #202124;
+            --text-secondary: #5f6368;
+            --border: #dadce0;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+            color: var(--text);
+            background: var(--bg);
+            margin: 0;
+            padding: 20px;
+        }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .header {
+            background: var(--card-bg);
+            padding: 24px;
+            border-radius: 8px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+            margin-bottom: 24px;
+        }
+        .header h1 { margin: 0; color: var(--primary); }
+        .meta { color: var(--text-secondary); font-size: 0.9em; }
+        .section {
+            background: var(--card-bg);
+            padding: 24px;
+            border-radius: 8px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+            margin-bottom: 24px;
+        }
+        h2, h3 { margin-top: 0; color: var(--primary); }
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin: 20px 0;
+        }
+        .score-card {
+            text-align: center;
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+        .score-card.mobile { border-top: 4px solid #4285f4; }
+        .score-card.desktop { border-top: 4px solid #34a853; }
+        .score-value { font-size: 3em; font-weight: bold; }
+        .score-label { color: var(--text-secondary); margin-top: 8px; }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 16px;
+            font-size: 0.95em;
+        }
+        th, td {
+            text-align: left;
+            padding: 12px;
+            border-bottom: 1px solid var(--border);
+        }
+        th { color: var(--text-secondary); font-weight: 500; background: #f8f9fa; }
+        .score-pill {
+            padding: 4px 12px;
+            border-radius: 12px;
+            color: white;
+            font-weight: bold;
+            font-size: 0.9em;
+        }
+        .url-cell {
+            max-width: 350px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .url-cell a { color: var(--primary); text-decoration: none; }
+        .url-cell a:hover { text-decoration: underline; }
+        .device-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.8em;
+            font-weight: 500;
+        }
+        .device-badge.mobile { background: #e8f0fe; color: #4285f4; }
+        .device-badge.desktop { background: #e6f4ea; color: #34a853; }
+        .metrics-row { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 12px; }
+        .metric-item {
+            background: #f8f9fa;
+            padding: 8px 16px;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+        .metric-label { color: var(--text-secondary); }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>PageSpeed Insights Report</h1>
+            <div class="meta">Generated: ${date} | ${report.summary.totalUrls} URLs tested</div>
+        </div>
+
+        <div class="section">
+            <h2>Average Scores</h2>
+            <div class="summary-grid">
+                <div class="score-card mobile">
+                    <div class="score-value" style="color: ${getScoreColor(report.summary.averageMobileScore)}">${report.summary.averageMobileScore}</div>
+                    <div class="score-label">Mobile</div>
+                </div>
+                <div class="score-card desktop">
+                    <div class="score-value" style="color: ${getScoreColor(report.summary.averageDesktopScore)}">${report.summary.averageDesktopScore}</div>
+                    <div class="score-label">Desktop</div>
+                </div>
+            </div>
+
+            <h3>Average Metrics</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Device</th>
+                        <th>LCP</th>
+                        <th>INP</th>
+                        <th>CLS</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><span class="device-badge mobile">Mobile</span></td>
+                        <td>${formatPSIValue(report.summary.averageMobileLcp, 'lcp')}</td>
+                        <td>${report.summary.averageMobileInp}ms</td>
+                        <td>${report.summary.averageMobileCls.toFixed(3)}</td>
+                    </tr>
+                    <tr>
+                        <td><span class="device-badge desktop">Desktop</span></td>
+                        <td>${formatPSIValue(report.summary.averageDesktopLcp, 'lcp')}</td>
+                        <td>${report.summary.averageDesktopInp}ms</td>
+                        <td>${report.summary.averageDesktopCls.toFixed(3)}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="section">
+            <h2>Detailed Results</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>URL</th>
+                        <th>Device</th>
+                        <th>Score</th>
+                        <th>LCP</th>
+                        <th>INP</th>
+                        <th>CLS</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${report.results.map(r => `
+                        <tr>
+                            <td class="url-cell" title="${r.url}" rowspan="2"><a href="${r.url}" target="_blank">${r.url}</a></td>
+                            <td><span class="device-badge mobile">Mobile</span></td>
+                            ${r.mobile.error
+                                ? `<td colspan="4">Error: ${r.mobile.error}</td>`
+                                : `<td><span class="score-pill" style="background: ${getScoreColor(r.mobile.score)}">${r.mobile.score}</span></td>
+                                   <td>${formatPSIValue(r.mobile.lcp, 'lcp')}</td>
+                                   <td>${r.mobile.inp}ms</td>
+                                   <td>${r.mobile.cls.toFixed(3)}</td>`
+                            }
+                        </tr>
+                        <tr>
+                            <td><span class="device-badge desktop">Desktop</span></td>
+                            ${r.desktop.error
+                                ? `<td colspan="4">Error: ${r.desktop.error}</td>`
+                                : `<td><span class="score-pill" style="background: ${getScoreColor(r.desktop.score)}">${r.desktop.score}</span></td>
+                                   <td>${formatPSIValue(r.desktop.lcp, 'lcp')}</td>
+                                   <td>${r.desktop.inp}ms</td>
+                                   <td>${r.desktop.cls.toFixed(3)}</td>`
+                            }
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</body>
+</html>`;
+}
+
+/**
+ * Save URL test report to files
+ */
+export function saveURLTestReport(
+  report: URLTestReport,
+  outputDir: string,
+  format: 'json' | 'markdown' | 'html' | 'both' = 'both'
+): { jsonPath?: string; markdownPath?: string; htmlPath?: string } {
+  // Create output directory if it doesn't exist
+  if (!existsSync(outputDir)) {
+    mkdirSync(outputDir, { recursive: true });
+  }
+
+  const dateStr = new Date().toISOString().split('T')[0];
+  const paths: { jsonPath?: string; markdownPath?: string; htmlPath?: string } = {};
+
+  if (format === 'json' || format === 'both') {
+    const jsonPath = join(outputDir, `url-test-${dateStr}.json`);
+    writeFileSync(jsonPath, JSON.stringify(report, null, 2));
+    paths.jsonPath = jsonPath;
+  }
+
+  if (format === 'markdown' || format === 'both') {
+    const markdownPath = join(outputDir, `url-test-${dateStr}.md`);
+    writeFileSync(markdownPath, generateURLTestMarkdownReport(report));
+    paths.markdownPath = markdownPath;
+  }
+
+  if (format === 'html' || format === 'both') {
+    const htmlPath = join(outputDir, `url-test-${dateStr}.html`);
+    writeFileSync(htmlPath, generateURLTestHtmlReport(report));
+    paths.htmlPath = htmlPath;
+  }
+
+  return paths;
 }
 

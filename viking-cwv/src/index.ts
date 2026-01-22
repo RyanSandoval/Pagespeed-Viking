@@ -13,12 +13,15 @@ import {
   flattenNestedSamples,
 } from './sample.js';
 import { fetchCrUXData } from './crux.js';
-import { fetchPSIDataForUrls, calculateAverages } from './psi.js';
+import { fetchPSIDataForUrls, calculateAverages, fetchPSIDataForUrlsDualStrategy } from './psi.js';
 import {
   buildReport,
   buildPageTypeSamples,
   saveReport,
   printSummary,
+  buildURLTestReport,
+  printURLTestSummary,
+  saveURLTestReport,
 } from './report.js';
 import type {
   CLIOptions,
@@ -45,6 +48,10 @@ program
   )
   .option('-v, --verbose', 'Show verbose output')
   .option('-c, --config <path>', 'Path to config file')
+  .option(
+    '-u, --urls <urls>',
+    'Test specific URLs (comma-separated, 1-10 URLs) with mobile and desktop'
+  )
   .action(run);
 
 async function run(options: {
@@ -54,6 +61,7 @@ async function run(options: {
   format: string;
   verbose?: boolean;
   config?: string;
+  urls?: string;
 }) {
   const cliOptions: CLIOptions = {
     samples: parseInt(options.samples, 10),
@@ -62,7 +70,14 @@ async function run(options: {
     format: options.format as 'json' | 'markdown' | 'html' | 'both',
     verbose: options.verbose,
     config: options.config,
+    urls: options.urls ? options.urls.split(',').map((u) => u.trim()) : undefined,
   };
+
+  // URL testing mode - separate flow
+  if (cliOptions.urls && cliOptions.urls.length > 0) {
+    await runURLTest(cliOptions);
+    return;
+  }
 
   console.log(chalk.bold.blue('\n🚢 Viking Core Web Vitals Analyzer\n'));
 
@@ -351,6 +366,85 @@ async function run(options: {
   if (paths.htmlPath) console.log(`  HTML: ${paths.htmlPath}`); // eslint-disable-line
 
   console.log(chalk.blue('\n✨ Analysis complete!\n'));
+}
+
+/**
+ * Run URL testing mode - test specific URLs with mobile and desktop
+ */
+async function runURLTest(cliOptions: CLIOptions) {
+  const urls = cliOptions.urls!;
+
+  // Validate URL count
+  if (urls.length < 1 || urls.length > 10) {
+    console.error(
+      chalk.red('Error: Please provide between 1 and 10 URLs (comma-separated)')
+    );
+    process.exit(1);
+  }
+
+  // Validate URLs format
+  const invalidUrls = urls.filter((url) => {
+    try {
+      new URL(url);
+      return false;
+    } catch {
+      return true;
+    }
+  });
+
+  if (invalidUrls.length > 0) {
+    console.error(chalk.red('Error: Invalid URL(s):'));
+    invalidUrls.forEach((url) => console.error(chalk.red(`  - ${url}`)));
+    process.exit(1);
+  }
+
+  console.log(chalk.bold.blue('\n🔍 PageSpeed Insights URL Tester\n'));
+  console.log(`Testing ${urls.length} URL(s) for Mobile and Desktop...\n`);
+
+  // Load config for API key and output settings
+  let config = loadConfig(cliOptions.config);
+  config = applyCliOptions(config, cliOptions);
+
+  if (!config.apiKey) {
+    console.error(
+      chalk.red(
+        'Error: API key required. Set GOOGLE_API_KEY environment variable or provide in config.'
+      )
+    );
+    process.exit(1);
+  }
+
+  const spinner = ora('Running PageSpeed analysis...').start();
+
+  try {
+    const results = await fetchPSIDataForUrlsDualStrategy(urls, config.apiKey, {
+      delayBetweenRequests: config.delayBetweenRequests,
+      onProgress: (current, total, url, strategy) => {
+        spinner.text = `[${current}/${total}] Testing ${url} (${strategy})...`;
+      },
+    });
+
+    spinner.succeed('PageSpeed analysis complete');
+
+    // Build and display report
+    const report = buildURLTestReport(results);
+    printURLTestSummary(report);
+
+    // Save reports
+    const paths = saveURLTestReport(report, config.outputDir, cliOptions.format);
+    console.log(chalk.green('Reports saved:'));
+    if (paths.jsonPath) console.log(`  JSON: ${paths.jsonPath}`);
+    if (paths.markdownPath) console.log(`  Markdown: ${paths.markdownPath}`);
+    if (paths.htmlPath) console.log(`  HTML: ${paths.htmlPath}`);
+
+    console.log(chalk.blue('\n✨ URL testing complete!\n'));
+  } catch (error) {
+    spinner.fail('PageSpeed analysis failed');
+    console.error(
+      chalk.red(`Error: ${error instanceof Error ? error.message : error}`)
+    );
+    process.exit(1);
+  }
 }
 
 program.parse(process.argv);

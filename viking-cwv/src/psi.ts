@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { PSIResult } from './types.js';
+import type { PSIResult, URLTestResult } from './types.js';
 
 const PSI_API_ENDPOINT =
   'https://www.googleapis.com/pagespeedonline/v5/runPagespeed';
@@ -232,4 +232,71 @@ export function formatPSIValue(
   }
 
   return `${Math.round(value)}ms`;
+}
+
+/**
+ * Test a single URL for both mobile and desktop
+ */
+export async function fetchPSIDataDualStrategy(
+  url: string,
+  apiKey: string,
+  options: {
+    delayBetweenRequests?: number;
+    onProgress?: (strategy: string) => void;
+  } = {}
+): Promise<URLTestResult> {
+  const { delayBetweenRequests = 1000, onProgress } = options;
+
+  if (onProgress) {
+    onProgress('mobile');
+  }
+  const mobile = await fetchPSIData(url, apiKey, 'mobile');
+
+  // Add delay between mobile and desktop requests
+  if (delayBetweenRequests > 0) {
+    await sleep(delayBetweenRequests);
+  }
+
+  if (onProgress) {
+    onProgress('desktop');
+  }
+  const desktop = await fetchPSIData(url, apiKey, 'desktop');
+
+  return { url, mobile, desktop };
+}
+
+/**
+ * Test multiple URLs for both mobile and desktop
+ */
+export async function fetchPSIDataForUrlsDualStrategy(
+  urls: string[],
+  apiKey: string,
+  options: {
+    delayBetweenRequests?: number;
+    onProgress?: (current: number, total: number, url: string, strategy: string) => void;
+  } = {}
+): Promise<URLTestResult[]> {
+  const { delayBetweenRequests = 1000, onProgress } = options;
+
+  const results: URLTestResult[] = [];
+
+  for (let i = 0; i < urls.length; i++) {
+    const url = urls[i];
+
+    const result = await fetchPSIDataDualStrategy(url, apiKey, {
+      delayBetweenRequests,
+      onProgress: onProgress
+        ? (strategy) => onProgress(i + 1, urls.length, url, strategy)
+        : undefined,
+    });
+
+    results.push(result);
+
+    // Add delay between URLs (except for the last one)
+    if (i < urls.length - 1 && delayBetweenRequests > 0) {
+      await sleep(delayBetweenRequests);
+    }
+  }
+
+  return results;
 }
