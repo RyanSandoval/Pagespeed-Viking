@@ -408,7 +408,8 @@ async function runURLTest(cliOptions: CLIOptions) {
   if (!config.apiKey) {
     console.error(
       chalk.red(
-        'Error: API key required. Set GOOGLE_API_KEY environment variable or provide in config.'
+        'Error: API key required. Set PSI_API_KEY environment variable or provide in config.\n' +
+        'Get your API key at: https://console.cloud.google.com/apis/credentials'
       )
     );
     process.exit(1);
